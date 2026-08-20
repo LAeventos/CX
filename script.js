@@ -94,7 +94,7 @@ form.addEventListener("submit", async (event) => {
     "Local do evento": formData.get("Local do evento"),
     "Data do evento": formattedDate,
     "Número do powerbank": formData.get("Número do powerbank"),
-    "_subject": `Nova reserva de Powerbank - ${formData.get("Nome completo")}`,
+     "_subject": ` PowerBank - ${formData.get("Local do evento")} - ${formData.get("Nome completo")}`,
     "_template": "table"
   };
 
