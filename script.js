@@ -108,10 +108,26 @@ form.addEventListener("submit", async (event) => {
       body: JSON.stringify(payload)
     });
 
-    const data = await response.json().catch(() => ({}));
+    // Lê a resposta como texto primeiro. Assim conseguimos mostrar o erro real
+    // mesmo quando o FormSubmit devolver HTML ou uma resposta que não seja JSON.
+    const responseText = await response.text();
+    let data = {};
+
+    try {
+      data = responseText ? JSON.parse(responseText) : {};
+    } catch (_) {
+      data = {};
+    }
 
     if (!response.ok || data.success === false) {
-      throw new Error(data.message || "Não foi possível enviar a reserva.");
+      const serverMessage =
+        data.message ||
+        data.error ||
+        (responseText && !responseText.trim().startsWith("<")
+          ? responseText.trim()
+          : "Sem mensagem adicional do servidor");
+
+      throw new Error(`HTTP ${response.status} - ${serverMessage}`);
     }
 
     form.reset();
@@ -119,9 +135,14 @@ form.addEventListener("submit", async (event) => {
     setStatus("Reserva enviada com sucesso.", "success");
     openSuccessModal();
   } catch (error) {
-    console.error(error);
+    console.error("Erro ao enviar reserva:", error);
+
+    const detail = error && error.message
+      ? error.message
+      : "Erro desconhecido";
+
     setStatus(
-      "Não foi possível enviar agora. Verifique sua internet e tente novamente.",
+      `Erro no envio: ${detail}`,
       "error"
     );
   } finally {
