@@ -1,343 +1,151 @@
-:root {
-  --bg: #07020f;
-  --panel: #10091d;
-  --panel-2: #171025;
-  --line: rgba(255, 255, 255, 0.12);
-  --text: #ffffff;
-  --muted: #b9b4c7;
-  --purple: #7a12e8;
-  --purple-2: #9b3cff;
-  --purple-3: #4a059f;
-  --danger: #ff6b7d;
-  --success: #70e4b0;
+const FORM_ENDPOINT = "https://formsubmit.co/ajax/Cxestacaoderecarga@gmail.com";
+
+const form = document.getElementById("reservationForm");
+const submitBtn = document.getElementById("submitBtn");
+const submitText = document.getElementById("submitText");
+const statusBox = document.getElementById("formStatus");
+const successModal = document.getElementById("successModal");
+const closeModal = document.getElementById("closeModal");
+const dateInput = document.getElementById("data");
+const phoneInput = document.getElementById("telefone");
+
+document.getElementById("currentYear").textContent = new Date().getFullYear();
+
+// Não permite reservar uma data anterior ao dia atual.
+const today = new Date();
+const localToday = new Date(today.getTime() - today.getTimezoneOffset() * 60000)
+  .toISOString()
+  .split("T")[0];
+dateInput.min = localToday;
+
+// Máscara simples de telefone brasileiro.
+phoneInput.addEventListener("input", (event) => {
+  let value = event.target.value.replace(/\D/g, "").slice(0, 11);
+
+  if (value.length > 10) {
+    value = value.replace(/^(\d{2})(\d{5})(\d{0,4}).*/, "($1) $2-$3");
+  } else if (value.length > 6) {
+    value = value.replace(/^(\d{2})(\d{4})(\d{0,4}).*/, "($1) $2-$3");
+  } else if (value.length > 2) {
+    value = value.replace(/^(\d{2})(\d{0,5}).*/, "($1) $2");
+  } else if (value.length > 0) {
+    value = value.replace(/^(\d{0,2})/, "($1");
+  }
+
+  event.target.value = value;
+});
+
+function setLoading(isLoading) {
+  submitBtn.disabled = isLoading;
+  submitText.textContent = isLoading ? "ENVIANDO..." : "ENVIAR RESERVA POR E-MAIL";
 }
 
-* { box-sizing: border-box; }
-
-html { scroll-behavior: smooth; }
-
-body {
-  margin: 0;
-  min-height: 100vh;
-  color: var(--text);
-  background:
-    radial-gradient(circle at 50% -5%, rgba(123, 18, 232, 0.36), transparent 30%),
-    radial-gradient(circle at 92% 36%, rgba(90, 14, 156, 0.16), transparent 28%),
-    linear-gradient(180deg, #100022 0%, #08020f 48%, #05010b 100%);
-  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+function setStatus(message = "", type = "") {
+  statusBox.textContent = message;
+  statusBox.className = `form-status ${type}`.trim();
 }
 
-button, input, select { font: inherit; }
-
-a { color: #cf9cff; text-decoration: none; word-break: break-word; }
-a:hover { text-decoration: underline; }
-
-.page-shell {
-  width: min(100%, 920px);
-  margin: 0 auto;
-  padding: max(28px, env(safe-area-inset-top)) 18px calc(34px + env(safe-area-inset-bottom));
+function openSuccessModal() {
+  successModal.classList.add("show");
+  successModal.setAttribute("aria-hidden", "false");
+  closeModal.focus();
 }
 
-.hero {
-  text-align: center;
-  padding: 14px 0 28px;
+function closeSuccessModal() {
+  successModal.classList.remove("show");
+  successModal.setAttribute("aria-hidden", "true");
 }
 
-.eyebrow {
-  margin: 0 0 18px;
-  font-size: clamp(15px, 3.8vw, 22px);
-  font-weight: 800;
-  letter-spacing: .34em;
-  color: #c881ff;
-}
+closeModal.addEventListener("click", closeSuccessModal);
+successModal.addEventListener("click", (event) => {
+  if (event.target === successModal) closeSuccessModal();
+});
 
-.logo-wrap {
-  width: min(82vw, 590px);
-  aspect-ratio: 1 / 1;
-  margin: 0 auto;
-  border-radius: 32px;
-  overflow: hidden;
-  box-shadow: 0 32px 90px rgba(103, 0, 216, 0.22);
-}
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && successModal.classList.contains("show")) {
+    closeSuccessModal();
+  }
+});
 
-.hero-logo {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
+form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  setStatus();
 
-.hero-text {
-  margin: 22px auto 0;
-  max-width: 650px;
-  color: var(--muted);
-  font-size: clamp(18px, 4.5vw, 27px);
-  line-height: 1.45;
-}
+  if (!form.checkValidity()) {
+    form.reportValidity();
+    return;
+  }
 
-.form-section {
-  margin-top: 10px;
-  padding: 26px 16px 22px;
-  background: linear-gradient(180deg, rgba(19, 11, 34, 0.92), rgba(11, 7, 21, 0.96));
-  border: 1px solid var(--line);
-  border-radius: 28px;
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.24);
-}
+  // Honeypot contra bots.
+  if (document.getElementById("website").value) return;
 
-.form-section h1 {
-  margin: 0;
-  font-size: clamp(30px, 7vw, 48px);
-  line-height: 1.05;
-}
+  setLoading(true);
 
-.section-intro {
-  margin: 14px 0 26px;
-  color: var(--muted);
-  font-size: 17px;
-  line-height: 1.55;
-}
+  const formData = new FormData(form);
+  const rawDate = formData.get("Data do evento");
+  const formattedDate = rawDate
+    ? new Date(`${rawDate}T12:00:00`).toLocaleDateString("pt-BR")
+    : "";
 
-.field { margin-bottom: 17px; }
+  const payload = {
+    "Nome completo": formData.get("Nome completo"),
+    "Telefone": formData.get("Telefone"),
+    "Nome do evento": formData.get("Nome do evento"),
+    "Local do evento": formData.get("Local do evento"),
+    "Data do evento": formattedDate,
+    "Número do powerbank": formData.get("Número do powerbank"),
+     "_subject": ` PowerBank - ${formData.get("Local do evento")} - ${formData.get("Nome completo")}`,
+    "_template": "table"
+  };
 
-.field label {
-  display: block;
-  margin: 0 0 9px;
-  font-weight: 750;
-  font-size: 16px;
-}
+  try {
+    const response = await fetch(FORM_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
 
-.control {
-  min-height: 66px;
-  display: flex;
-  align-items: center;
-  border: 1px solid rgba(220, 203, 255, 0.16);
-  background: rgba(6, 1, 15, 0.86);
-  border-radius: 18px;
-  overflow: hidden;
-  transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
-}
+    // Lê a resposta como texto primeiro. Assim conseguimos mostrar o erro real
+    // mesmo quando o FormSubmit devolver HTML ou uma resposta que não seja JSON.
+    const responseText = await response.text();
+    let data = {};
 
-.control:focus-within {
-  border-color: rgba(177, 100, 255, 0.72);
-  box-shadow: 0 0 0 4px rgba(123, 18, 232, 0.14), 0 12px 34px rgba(70, 0, 135, 0.2);
-}
+    try {
+      data = responseText ? JSON.parse(responseText) : {};
+    } catch (_) {
+      data = {};
+    }
 
-.icon {
-  flex: 0 0 58px;
-  height: 46px;
-  margin-left: 9px;
-  display: grid;
-  place-items: center;
-  color: #d49cff;
-  font-size: 22px;
-  border-radius: 13px;
-  background: linear-gradient(135deg, rgba(127, 23, 224, .62), rgba(72, 10, 133, .5));
-  border: 1px solid rgba(201, 137, 255, 0.14);
-}
+    if (!response.ok || data.success === false) {
+      const serverMessage =
+        data.message ||
+        data.error ||
+        (responseText && !responseText.trim().startsWith("<")
+          ? responseText.trim()
+          : "Sem mensagem adicional do servidor");
 
-.control input,
-.control select {
-  width: 100%;
-  min-width: 0;
-  height: 64px;
-  padding: 0 16px;
-  color: white;
-  background: transparent;
-  border: 0;
-  outline: 0;
-  font-size: 17px;
-}
+      throw new Error(`HTTP ${response.status} - ${serverMessage}`);
+    }
 
-.control input::placeholder { color: #827b96; }
+    form.reset();
+    dateInput.min = localToday;
+    setStatus("Reserva enviada com sucesso.", "success");
+    openSuccessModal();
+  } catch (error) {
+    console.error("Erro ao enviar reserva:", error);
 
-.control input[type="date"] {
-  color-scheme: dark;
-}
+    const detail = error && error.message
+      ? error.message
+      : "Erro desconhecido";
 
-.control select {
-  appearance: none;
-  -webkit-appearance: none;
-  cursor: pointer;
-  padding-right: 46px;
-}
-
-/* As opções abertas acompanham a paleta roxa do site. */
-.control select option {
-  color: #ffffff;
-  background: #241039;
-}
-
-.control select option:checked {
-  color: #ffffff;
-  background: #6f16c9;
-}
-
-.control select option:disabled {
-  color: #c5b7d7;
-  background: #1a0d2a;
-}
-
-/* Mantém as setas nativas do campo numérico visíveis. */
-.number-control input[type="number"] {
-  color-scheme: dark;
-}
-
-.select-control { position: relative; }
-.select-control::after {
-  content: "⌄";
-  position: absolute;
-  right: 18px;
-  top: 50%;
-  transform: translateY(-58%);
-  color: #d9d0e5;
-  font-size: 22px;
-  pointer-events: none;
-}
-
-.submit-btn {
-  width: 100%;
-  min-height: 70px;
-  margin-top: 9px;
-  padding: 14px 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  color: white;
-  border: 1px solid rgba(218, 159, 255, 0.5);
-  border-radius: 18px;
-  background: linear-gradient(105deg, #5e13da 0%, #8b0bea 48%, #6b06c7 100%);
-  box-shadow: 0 15px 42px rgba(118, 14, 226, 0.28), inset 0 1px 0 rgba(255,255,255,.18);
-  font-size: clamp(16px, 4.4vw, 21px);
-  font-weight: 850;
-  letter-spacing: .01em;
-  cursor: pointer;
-  transition: transform .18s ease, filter .18s ease, opacity .18s ease;
-}
-
-.submit-btn:hover { filter: brightness(1.08); transform: translateY(-1px); }
-.submit-btn:active { transform: translateY(1px); }
-.submit-btn:disabled { opacity: .62; cursor: wait; transform: none; }
-.mail-icon { font-size: 26px; }
-
-.form-note {
-  margin: 18px 4px 0;
-  text-align: center;
-  color: var(--muted);
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-.form-status {
-  min-height: 24px;
-  margin-top: 12px;
-  text-align: center;
-  font-size: 14px;
-}
-.form-status.error { color: var(--danger); }
-.form-status.success { color: var(--success); }
-
-.honeypot {
-  position: absolute !important;
-  left: -99999px !important;
-  opacity: 0 !important;
-  pointer-events: none !important;
-}
-
-.company-card {
-  margin-top: 22px;
-  padding: 18px;
-  display: grid;
-  grid-template-columns: 128px 1fr;
-  gap: 20px;
-  align-items: center;
-  border: 1px solid var(--line);
-  border-radius: 24px;
-  background: rgba(14, 8, 26, .9);
-}
-
-.company-logo-wrap {
-  aspect-ratio: 1 / 1;
-  border-radius: 18px;
-  overflow: hidden;
-}
-.company-logo { display:block; width:100%; height:100%; object-fit:cover; }
-
-.company-info h2 { margin: 0 0 14px; font-size: 25px; }
-.company-info p { margin: 10px 0 0; color: #d2ccdc; line-height: 1.45; }
-.company-info strong { color: white; }
-
-footer {
-  padding: 22px 8px 4px;
-  text-align: center;
-  color: #8f889b;
-  font-size: 13px;
-}
-
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: none;
-  place-items: center;
-  padding: 20px;
-  background: rgba(2, 0, 7, .78);
-  backdrop-filter: blur(10px);
-}
-
-.modal-backdrop.show { display: grid; }
-
-.modal {
-  width: min(100%, 430px);
-  padding: 28px 24px 22px;
-  text-align: center;
-  border: 1px solid rgba(210, 158, 255, .25);
-  border-radius: 24px;
-  background: linear-gradient(180deg, #191027, #0c0714);
-  box-shadow: 0 26px 80px rgba(0,0,0,.55);
-}
-
-.success-mark {
-  width: 68px;
-  height: 68px;
-  margin: 0 auto 16px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  color: #13051e;
-  background: var(--success);
-  font-size: 34px;
-  font-weight: 900;
-}
-
-.modal h2 { margin: 0 0 10px; font-size: 28px; }
-.modal p { margin: 0; color: var(--muted); line-height: 1.55; }
-.modal-btn {
-  width: 100%;
-  margin-top: 22px;
-  padding: 13px 18px;
-  color: white;
-  background: linear-gradient(90deg, #6614d9, #8e13e8);
-  border: 0;
-  border-radius: 14px;
-  font-weight: 800;
-  cursor: pointer;
-}
-
-@media (max-width: 520px) {
-  .page-shell { padding-left: 13px; padding-right: 13px; }
-  .logo-wrap { width: min(88vw, 480px); border-radius: 24px; }
-  .form-section { padding: 22px 14px 18px; border-radius: 24px; }
-  .control { min-height: 62px; border-radius: 16px; }
-  .control input, .control select { height: 60px; font-size: 16px; padding-left: 12px; }
-  .icon { flex-basis: 50px; height: 42px; margin-left: 8px; font-size: 19px; }
-  .company-card { grid-template-columns: 96px 1fr; gap: 14px; padding: 14px; }
-  .company-info h2 { font-size: 21px; }
-  .company-info p { font-size: 14px; }
-}
-
-@media (max-width: 390px) {
-  .eyebrow { letter-spacing: .22em; }
-  .company-card { grid-template-columns: 1fr; text-align: center; }
-  .company-logo-wrap { width: 120px; margin: 0 auto; }
-}
+    setStatus(
+      `Erro no envio: ${detail}`,
+      "error"
+    );
+  } finally {
+    setLoading(false);
+  }
+});
